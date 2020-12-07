@@ -42,10 +42,10 @@ class TileValidator
         return this.isDefined( this.initializedTilesArray, row, column );
     }
 
-    isValidValue( row, column, newValue )
+    isValidValue( matrix, row, column, value )
     {
         // If the new value is invalid, return false.
-        if( newValue < 1 || newValue > this.rowLength ) {
+        if( value < 1 || value > this.rowLength ) {
             return false; 
         }
 
@@ -55,7 +55,7 @@ class TileValidator
             if( i == column ) {
                 continue;
             }
-            if( this.isDefined( this.tilesArray, row, i ) && this.tilesArray[row][i] === newValue ) {
+            if( this.isDefined( matrix, row, i ) && matrix[row][i] === value ) {
                 return false;
             }
         }
@@ -66,16 +66,31 @@ class TileValidator
             if( i == row ) {
                 continue;
             }
-            if( this.isDefined( this.tilesArray, i, column ) && this.tilesArray[i][column] === newValue ) {
+            if( this.isDefined( matrix, i, column ) && matrix[i][column] === value ) {
                 return false;
             }
         }
         return true;
     }
 
+    isValidTile( row, column, value )
+    {
+        return this.isValidValue( this.tilesArray, row, column, value );
+    }
+
+    isValidInit( row, column, value )
+    {
+        return this.isValidValue( this.initializedTilesArray, row, column, value );
+    }
+
     updateTile( row, column, newValue )
     {
         this.tilesArray[row][column] = newValue;
+    }
+
+    updateInit( row, column, newValue )
+    {
+        this.initializedTilesArray[row][column] = newValue;
     }
 }
 
@@ -191,15 +206,15 @@ class TableInitializer
             }
 
             // Validate and adjust the value if required.
-            var isValidValue = tileValidator.isValidValue( row, column, value );
+            var isValidValue = tileValidator.isValidInit( row, column, value );
             while( !isValidValue ) {
                 value = this.getNextValue( value );
-                isValidValue = tileValidator.isValidValue( row, column, value );
+                isValidValue = tileValidator.isValidInit( row, column, value );
             }
 
             // Store the random value.
             try {
-                initializedTilesArray[ row ][ column ] = value;
+                tileValidator.updateInit( row, column, value );
             } catch( e ) {
                 console.log( e );
             }

@@ -55,9 +55,9 @@ function () {
     }
   }, {
     key: "isValidValue",
-    value: function isValidValue(row, column, newValue) {
+    value: function isValidValue(matrix, row, column, value) {
       // If the new value is invalid, return false.
-      if (newValue < 1 || newValue > this.rowLength) {
+      if (value < 1 || value > this.rowLength) {
         return false;
       } // Check the new value against others in the row.
 
@@ -68,7 +68,7 @@ function () {
           continue;
         }
 
-        if (this.isDefined(this.tilesArray, row, i) && this.tilesArray[row][i] === newValue) {
+        if (this.isDefined(matrix, row, i) && matrix[row][i] === value) {
           return false;
         }
       } // Check the new value against others in the column.
@@ -80,7 +80,7 @@ function () {
           continue;
         }
 
-        if (this.isDefined(this.tilesArray, i, column) && this.tilesArray[i][column] === newValue) {
+        if (this.isDefined(matrix, i, column) && matrix[i][column] === value) {
           return false;
         }
       }
@@ -88,9 +88,24 @@ function () {
       return true;
     }
   }, {
+    key: "isValidTile",
+    value: function isValidTile(row, column, value) {
+      return this.isValidValue(this.tilesArray, row, column, value);
+    }
+  }, {
+    key: "isValidInit",
+    value: function isValidInit(row, column, value) {
+      return this.isValidValue(this.initializedTilesArray, row, column, value);
+    }
+  }, {
     key: "updateTile",
     value: function updateTile(row, column, newValue) {
       this.tilesArray[row][column] = newValue;
+    }
+  }, {
+    key: "updateInit",
+    value: function updateInit(row, column, newValue) {
+      this.initializedTilesArray[row][column] = newValue;
     }
   }]);
 
@@ -219,16 +234,16 @@ function () {
         } // Validate and adjust the value if required.
 
 
-        var isValidValue = tileValidator.isValidValue(row, column, value);
+        var isValidValue = tileValidator.isValidInit(row, column, value);
 
         while (!isValidValue) {
           value = this.getNextValue(value);
-          isValidValue = tileValidator.isValidValue(row, column, value);
+          isValidValue = tileValidator.isValidInit(row, column, value);
         } // Store the random value.
 
 
         try {
-          initializedTilesArray[row][column] = value;
+          tileValidator.updateInit(row, column, value);
         } catch (e) {
           console.log(e);
         }
