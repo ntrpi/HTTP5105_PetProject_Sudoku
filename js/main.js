@@ -1,26 +1,46 @@
-var gameTable;
-var dimension;
-var numTiles;
+var globalTileCount = 0;
+var totalTiles = 0;
 
-function initVariables() 
+function incGlobalTileCount( i, j )
 {
-    // Get table from DOM.
-    gameTable = document.getElementById("gameTable");
+    globalTileCount++;
+    console.log( `count: ${globalTileCount}  i: ${i}  j: ${j}` );
+}
 
-    // Get or set dimension.
-    rowLength = dimension * dimension;
-    numTiles = rowLength * rowLength;
+function decGlobalTileCount( i, j )
+{
+    globalTileCount--;
+    console.log( `count: ${globalTileCount}  i: ${i}  j: ${j}` );
 }
 
 class TileValidator 
 {
-    constructor( initializedTilesArray, tilesArray )
+    constructor( dimension )
     {
-        this.initializedTilesArray = initializedTilesArray;
-        this.rowLength = initializedTilesArray.length;
-        this.tilesArray = tilesArray;
+        this.dimension = Number( dimension );
+        this.rowLength = this.dimension * this.dimension;
     }
 
+    // Get the next value. Loop around if necessary.
+    getNextValue( i )
+    {
+        i++;
+        if( i > this.rowLength ) {
+            i = 1;
+        }
+        return i;
+    }
+
+    // Get the next row or column item.
+    getNextIndex( i )
+    {
+        i++;
+        if( i >= this.rowLength ) {
+            i = 0;
+        }
+        return i;
+    }
+    
     isDefined( matrix, i, j )
     {
         var defined = false;
@@ -35,11 +55,6 @@ class TileValidator
             return false;
         }
         return defined !== undefined;
-    }
-
-    isInitialized( row, column )
-    {
-        return this.isDefined( this.initializedTilesArray, row, column );
     }
 
     isValidValue( matrix, row, column, value )
@@ -70,37 +85,46 @@ class TileValidator
                 return false;
             }
         }
+
+        // Check against the others in the square.
+        var rowSquare = Math.floor( row / this.dimension );
+        var rowStart = rowSquare * this.dimension;
+        var rowLimit = rowStart + this.dimension;
+
+        var columnSquare = Math.floor( column / this.dimension );
+        var columnStart = columnSquare * this.dimension;
+        var columnLimit = columnStart + this.dimension;
+
+        for( var i = rowStart; i < rowLimit; i++ ) {
+            for( var j = columnStart; j < columnLimit; j++ ) {
+                if( i === row && j === column ) {
+                    continue;
+                }
+                if( this.isDefined( matrix, i, j ) && matrix[i][j] === value ) {
+                    return false;
+                }
+            }
+        }
         return true;
     }
+}
 
-    isValidTile( row, column, value )
-    {
-        return this.isValidValue( this.tilesArray, row, column, value );
-    }
+function showError( valueLimit )
+{
+    if( valueLimit ) {
+        alert( "Please enter a number between 1 and " + valueLimit );
 
-    isValidInit( row, column, value )
-    {
-        return this.isValidValue( this.initializedTilesArray, row, column, value );
-    }
-
-    updateTile( row, column, newValue )
-    {
-        this.tilesArray[row][column] = newValue;
-    }
-
-    updateInit( row, column, newValue )
-    {
-        this.initializedTilesArray[row][column] = newValue;
+    } else {
+        alert( "That value conflicts with another value in the row, column, or square." );
     }
 }
 
 class TableInitializer
 {
-    constructor( gameTable, dimension )
+    constructor( dimension )
     {
-        this.gameTable = gameTable;
-        this.dimension = dimension;
-        this.rowLength = dimension * dimension;
+        this.dimension = Number( dimension );
+        this.rowLength = this.dimension * this.dimension;
     }
 
     toggleReadonly( cellInput )
@@ -113,12 +137,12 @@ class TableInitializer
     }
 
     // Array[ bottom/right, top/left ]
-    isBigBorder( num, rowLength )
+    isBigBorder( num )
     {
         num++;
         var borderArray = [ false, false ];
-        if( num !== rowLength && num !== 1 ) {
-            var remainder = num % dimension;
+        if( num !== this.rowLength && num !== 1 ) {
+            var remainder = num % this.dimension;
             switch( remainder ) {
                 case 0: 
                 case 1: {
@@ -129,51 +153,22 @@ class TableInitializer
         return borderArray;
     }
 
-    // Get the valid. Loop around if necessary.
-    getNextValue( i )
-    {
-        i++;
-        if( i > this.rowLength ) {
-            i = 1;
-        }
-        return i;
-    }
 
-    // Get the next row or column item.
-    getNextIndex( i )
+    getInitTiles( validator )
     {
-        i++;
-        if( i >= this.rowLength ) {
-            i = 0;
-        }
-        return i;
-    }
-
-    initTable()
-    {
-        // Set up an array to hold the tile values.
-        var tilesArray = new Array( this.rowLength );
-        for( var i = 0; i < this.rowLength; i++ ) {
-            tilesArray[i] = new Array( this.rowLength );
-        }
-
         // Set up an array to hold the initialized values.
-        // TODO: could we use an object for this?
-        var initializedTilesArray = new Array( this.rowLength );
+        let initTilesArray = new Array( this.rowLength );
         for( var i = 0; i < this.rowLength; i++ ) {
-            initializedTilesArray[i] = new Array( this.rowLength );
+            initTilesArray[i] = new Array( this.rowLength );
         }
-
-        // We're gonna need a validator.
-        var tileValidator = new TileValidator( initializedTilesArray, tilesArray )
 
         // Determine how many tiles to initiate.
-        var numStartTiles = this.rowLength + Math.round( rowLength / 2 );
+        var numStartTiles = this.rowLength + Math.round( this.rowLength / 2 );
 
         // Determine which tiles to initiate and what to initiate them with.
         for( var i = 0; i < numStartTiles; i++ ) {;
             // Map the random value onto a tile number;
-            var tile = Math.round( Math.random() * numTiles );
+            var tile = Math.round( Math.random() * numStartTiles );
 
             // Divide the tile number by number of rows to get the row number.
             var row = Math.round( tile / this.rowLength );
@@ -182,21 +177,19 @@ class TableInitializer
             var column = Math.round( tile % this.rowLength );
 
             // Check that this tile isn't already initialized.
-            var isInit = tileValidator.isInitialized( row, column );
+            var isInit = validator.isDefined( initTilesArray, row, column );
             while( isInit ) {
 
                 // Try incrementing the row.
-                row = this.getNextIndex( row );
+                row = validator.getNextIndex( row );
 
                 // Check again.
-                isInit = tileValidator.isInitialized( row, column );
+                isInit = validator.isDefined( initTilesArray, row, column );
                 if( isInit ) {
-                    break;
+                    // Increment the column and let the while loop do the checking.
+                    column = validator.getNextIndex( column );
+                    isInit = validator.isDefined( initTilesArray, row, column );
                 }
-
-                // Increment the column and let the while loop do the checking.
-                column = this.getNextIndex( column );
-                isInit = tileValidator.isInitialized( row, column );
             }
 
             // Get the random value.
@@ -206,38 +199,49 @@ class TableInitializer
             }
 
             // Validate and adjust the value if required.
-            var isValidValue = tileValidator.isValidInit( row, column, value );
+            var isValidValue = validator.isValidValue( initTilesArray, row, column, value );
             while( !isValidValue ) {
-                value = this.getNextValue( value );
-                isValidValue = tileValidator.isValidInit( row, column, value );
+                value = validator.getNextValue( value );
+                isValidValue = validator.isValidValue( initTilesArray, row, column, value );
             }
 
             // Store the random value.
             try {
-                tileValidator.updateInit( row, column, value );
+                initTilesArray[row][column] = value;
             } catch( e ) {
                 console.log( e );
             }
         }
 
+        return initTilesArray;
+    }
+
+    getAndAddCells( parent )
+    {
+        // Set up an array to hold the cells.
+        let cellsArray = new Array( this.rowLength );
+        for( var i = 0; i < this.rowLength; i++ ) {
+            cellsArray[i] = new Array( this.rowLength );
+        }
+
         // Initialize the table
         var columnBorderArrays = new Array( this.rowLength );
-        for( var i = 0; i < rowLength; i++ ) {
+        for( var i = 0; i < this.rowLength; i++ ) {
 
             // Create a new row.
-            var row = gameTable.insertRow( i );
+            let row = parent.insertRow( i );
 
             // See if this row needs the big border.
             console.log( "row i: " + i );
-            var rowBorderArray = this.isBigBorder( i, this.rowLength );
+            var rowBorderArray = this.isBigBorder( i );
 
             for( var j = 0; j < this.rowLength; j++ ) {
 
                 // Create a new cell.
-                var cell = row.insertCell( j );
+                let cell = row.insertCell( j );
+                cellsArray[i][j] = cell;
 
                 // Add some cell styling.
-                // TODO: this can be more efficient.
                 var cellStyle = document.createAttribute( "class" );
                 cellStyle.value = "cellStyle ";
                 if( columnBorderArrays[j] === undefined ) {
@@ -257,59 +261,130 @@ class TableInitializer
                 }
                 
                 cell.setAttributeNode( cellStyle );
+            }
+        }
+        return cellsArray;
+    }
+
+    setCellsInput( cellsArray, initTiles, tilesArray, validator )
+    {
+        for( var i = 0; i < this.rowLength; i++ ) {
+            for( var j = 0; j < this.rowLength; j++ ) {
+
+                let cell = cellsArray[i][j];
+
+                // If it is initialized, set it as fixed content.
+                if( validator.isDefined( initTiles, i, j ) ) {
+                    let cellContent = document.createElement( "div" );
+                    cellContent.innerHTML = initTiles[i][j];
+                    cellContent.setAttribute( "class", "initializedTile" );
+                    cell.appendChild( cellContent );
+                    continue;
+                }
 
                 // Set up the input.
-                var cellInput = document.createElement( "input" );
-                cell.appendChild( cellInput );
-                var inputType = document.createAttribute( "type" );
-                inputType.value = "text";
-                cellInput.setAttributeNode( inputType );
+                let cellInput = document.createElement( "input" );
+                cellInput.setAttribute( "type", "text" );
+                cellInput.setAttribute( "class", "inputStyle" );
+                var valueLimit = this.rowLength;
+                let r = Number(i);
+                let c = Number(j);
+                cellInput.onchange = function() {
+                    let value = cellInput.value;
+                    if( value === "" ) {
+                        tilesArray[r][c] = Number( 0 );
+                        decGlobalTileCount( r, c );
+                        return;                    
+                    } 
+                    if( isNaN( value ) ) {
+                        showError();
+                        return;
+                    }
 
-                var inputClass = document.createAttribute( "class" );
-                inputClass.value = "inputStyle ";
+                    value = Number( value );
+                    if( value < 1 || value > valueLimit ) {
+                        showError( valueLimit );
+                    
+                    } else if( !validator.isValidValue( tilesArray, r, c, value ) ) {
+                        showError();
 
-                if( tileValidator.isInitialized( i, j ) ) {
-                    inputClass.value += "initializedTile ";
-                    cellInput.placeholder = initializedTilesArray[i][j].toString();
+                    } else {
+                        tilesArray[r][c] = value;
+                        incGlobalTileCount( r, c );
+                    }                       
+                };
+                cellInput.onblur = function() {
+                    if( globalTileCount === totalTiles ) {
+                        for( var i = 0; i < valueLimit; i++ ) {
+                            for( var j = 0; j < valueLimit; j++ ) {
+                                if( !validator.isValidValue( tilesArray, i, j, tilesArray[i][j] ) ) {
+                                    alert( "One or more of your values is incorrect. You lose." );
+                                    return;
+                                }
+                            }
+                        }
+                        alert( "You win! Well done!" );
+                    }
                 }
-                cellInput.setAttributeNode( inputClass );
 
+                cell.appendChild( cellInput );
                 cell.onclick = this.toggleReadonly( cell );
+
             }
         }
     }
+
+    getTilesArray( validator, initTilesArray )
+    {
+        let tilesArray = new Array( this.rowLength );
+        for( var i = 0; i < this.rowLength; i++ ) {
+            tilesArray[i] = new Array( this.rowLength );
+            for( var j = 0; j < this.rowLength; j++ ) {
+                if( validator.isDefined( initTilesArray, i, j ) ) {
+                    tilesArray[i][j] = initTilesArray[i][j];
+                    incGlobalTileCount( i, j );
+                } else {
+                    tilesArray[i][j] = 0;
+                }
+            }
+        }
+        return tilesArray;
+    }
+
 };
 
 
 //LISTEN FOR load EVENT
-window.onload = pageLoaded;
+window.onload = function () 
+{    
+    let gameTable = document.getElementById( "gameTable" );
+    gameTable.innerHTML = "";
+    let gameForm = document.forms.gameForm;
+    let dimensionSelect = gameForm.dimensionSelect;
 
-//'WRAPPER' FUNCTION FOR DOM LOGIC
-function pageLoaded() 
-{
-    var dimensionSelect = document.getElementById( "dimensionSelect" );
-    var openDropdown = true;
-    dimensionSelect.onclick = function() {
+    var dimension;
+    var validator;
+    var tableInitializer;
+    var cellsArray;
+    var initTiles;
+    var tilesArray;
+    gameForm.onsubmit = function() {
 
-        // TODO: make this have better options.
-        if( !openDropdown ) {
-            openDropdown = true;
-            if( gameTable === undefined ) {
-                // Initialize variables.
-                dimension = dimensionSelect.value
+        gameTable.innerHTML = "";
+        globalTileCount = 0;
+        
+        dimension = dimensionSelect.value;
+        totalTiles = Math.pow( dimension, 4 );
 
-                initVariables();
+        validator = new TileValidator( dimension );
+        tableInitializer = new TableInitializer( Number( dimension ) );
+        cellsArray = tableInitializer.getAndAddCells( gameTable );
 
-                var tableInitializer = new TableInitializer( gameTable, dimension );
-                tableInitializer.initTable();
-            }
-        } else {
-            openDropdown = false;
-        }
+        initTiles = tableInitializer.getInitTiles( validator );
+        tilesArray = tableInitializer.getTilesArray( validator, initTiles );
+        tableInitializer.setCellsInput( cellsArray, initTiles, tilesArray, validator );
 
-
+        return false;
     }
-
-
 }
 
