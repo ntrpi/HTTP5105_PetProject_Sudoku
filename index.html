@@ -8,24 +8,34 @@
   </head>
   <body>
     <!-- Header -->
-    <header>
+    <header class="pageWrapper">
       <h1>Sudoku!</h1>
 
     </header>
     <!-- Main -->
-    <main id="main">
+    <main id="main" class="pageWrapper">
       <form action="#" method="post" id="gameForm" name="gameForm">
-        <label for="dimensionSelect">Select table size:</label>
-        <select name="dimensionSelect" id="dimensionSelect">
-          <option value=2 selected="selected">2</option>
-          <option value=3>3</option>
-          <option value=4>4</option>
-          <option value=5>5</option>
-        </select>
-        <input type="submit" name="submit" value="Start Game!">
+        <div class="formDiv">
+          <div>
+            <label class="selectLabel" for="dimensionSelect">Select table size:</label>
+            <select name="dimensionSelect" id="dimensionSelect">
+              <option value=2 selected="selected">2</option>
+              <option value=3>3</option>
+              <option value=4>4</option>
+            </select>
+          </div>
+          <input type="submit" name="startGame" id="startGame" value="Start Game!">
+        </div>
       </form>
-      <table id="gameTable">
-      </table>
+
+      <div class="tableDiv">
+        <div>
+          <table id="gameTable"></table>
+        </div>
+        <div>
+          <input type="button" name="restart" id="restart" value="Restart">
+        </div>
+      </div>
     </main>
     <!-- Footer -->
     <footer>
