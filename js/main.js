@@ -4,13 +4,28 @@ var totalTiles = 0;
 function incGlobalTileCount( i, j )
 {
     globalTileCount++;
-    console.log( `count: ${globalTileCount}  i: ${i}  j: ${j}` );
 }
 
 function decGlobalTileCount( i, j )
 {
     globalTileCount--;
-    console.log( `count: ${globalTileCount}  i: ${i}  j: ${j}` );
+}
+
+
+var msgElement = null;
+var startMsg = "Select your square size and click Start Game to play."
+
+function setMessage( msg, color )
+{
+    msgElement.innerHTML = msg;
+    if( color ) {
+        msgElement.style.color = color;
+    }
+}
+
+function resetMessage()
+{
+    setMessage( startMsg, "black" );
 }
 
 class TileValidator 
@@ -122,10 +137,10 @@ class TileValidator
 function showError( valueLimit )
 {
     if( valueLimit ) {
-        alert( "Please enter a number between 1 and " + valueLimit );
+        setMessage( "Please enter a number between 1 and " + valueLimit, "red" );
 
     } else {
-        alert( "That value conflicts with another value in the row, column, or square." );
+        setMessage( "That value conflicts with another value in the row, column, or square.", "red" );
     }
 }
 
@@ -233,11 +248,8 @@ class TableInitializer
         num++;
         var borderArray = [ false, false ];
         var remainder = num % this.dimension;
-        switch( remainder ) {
-            case 0: 
-            case 1: {
-                borderArray[ remainder ] = true;
-            }
+        if( remainder <= 1 ) {
+            borderArray[ remainder ] = true;
         }
         return borderArray;
     }
@@ -312,61 +324,56 @@ class TableInitializer
                     if( value === "" ) {
                         tilesArray[r][c] = Number( 0 );
                         decGlobalTileCount( r, c );
-                        return;                    
-                    } 
 
                     // Show error if something other than a number is entered.
-                    if( isNaN( value ) ) {
-                        showError();
-                        return;
-                    }
-
-                    // Convert it to a number, just in case it's a number string.
-                    value = Number( value );
-
-                    // Check the range.
-                    if( value < 1 || value > valueLimit ) {
+                    } else if( isNaN( value ) ) {
                         showError( valueLimit );
-                    
-                    // Run it through the validator.
-                    } else if( !validator.isValidValue( tilesArray, r, c, value ) ) {
-                        showError();
-
-                    // We're good, put it in the array.
+                        cellInput.focus();
                     } else {
-                        tilesArray[r][c] = value;
-                        incGlobalTileCount( r, c );
-                    }                       
-                };
 
-                // When the tile goes out of focus, check if all the tiles are complete.
-                cellInput.onblur = function() {
+                        // Convert it to a number, just in case it's a number string.
+                        value = Number( value );
 
-                    // If not, keep going.
-                    if( globalTileCount !== totalTiles ) {
-                        return;
-                    }
+                        // Check the range.
+                        if( value < 1 || value > valueLimit ) {
+                            showError( valueLimit );
+                            cellInput.focus();
+                        
+                        // Run it through the validator.
+                        } else if( !validator.isValidValue( tilesArray, r, c, value ) ) {
+                            showError();
+                            cellInput.focus();
 
-                    // Check all the completed tiles.
-                    for( var i = 0; i < valueLimit; i++ ) {
-                        for( var j = 0; j < valueLimit; j++ ) {
+                        // We're good, put it in the array.
+                        } else {
+                            tilesArray[r][c] = value;
+                            incGlobalTileCount( r, c );
+                            setMessage( "Good! Keep going!", "black");
 
-                            // Let the user know that a tile is out of place.
-                            // TODO: Improvement: highlight the offending tile.
-                            if( !validator.isValidValue( tilesArray, i, j, tilesArray[i][j] ) ) {
-                                alert( "One or more of your values is incorrect. You lose." );
-                                return;
+                            if( globalTileCount === totalTiles ) {
+
+                                // Check all the completed tiles.
+                                for( var i = 0; i < valueLimit; i++ ) {
+                                    for( var j = 0; j < valueLimit; j++ ) {
+
+                                        // Let the user know that a tile is out of place.
+                                        // TODO: Improvement: highlight the offending tile.
+                                        if( !validator.isValidValue( tilesArray, i, j, tilesArray[i][j] ) ) {
+                                            setMessage( "One or more of your values is incorrect. You lose.", "black" );
+                                            return;
+                                        }
+                                    }
+                                }
+
+                                // Let the user know that they finished successfully.
+                                setMessage( "You win! Well done!", "blue" );
                             }
-                        }
+                        }                       
                     }
-
-                    // Let the user know that they finished successfully.
-                    alert( "You win! Well done!" );
-                }
+                };
 
                 cell.appendChild( cellInput );
                 cell.onclick = this.toggleReadonly( cell );
-
             }
         }
     }
@@ -390,7 +397,6 @@ class TableInitializer
         }
         return tilesArray;
     }
-
 };
 
 function initGame( tableInitializer, validator, initTiles )
@@ -403,11 +409,16 @@ function initGame( tableInitializer, validator, initTiles )
     cellsArray = tableInitializer.getAndAddCells( gameTable );
     tilesArray = tableInitializer.getTilesArray( validator, initTiles );
     tableInitializer.setCellsInput( cellsArray, initTiles, tilesArray, validator );
+
+    setMessage( "You've got this!" );
 }
 
 //LISTEN FOR load EVENT
 window.onload = function () 
 {    
+    msgElement = document.getElementById( "messageDiv" );
+    resetMessage();
+
     let gameTable = document.getElementById( "gameTable" );
     gameTable.innerHTML = "";
     let gameForm = document.forms.gameForm;

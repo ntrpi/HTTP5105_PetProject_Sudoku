@@ -22,6 +22,12 @@ main {
   text-align: center;
 }
 
+#messageDiv {
+  padding-top: .5em;
+  height: 2em;
+  padding-bottom: 1em;
+}
+
 .hidden {
   position: absolute;
   left: -10000px;
