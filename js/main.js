@@ -13,7 +13,7 @@ function decGlobalTileCount( i, j )
 
 
 var msgElement = null;
-var startMsg = "Select your square size and click Start Game to play."
+var startMsg = "Click Start Game to play."
 
 function setMessage( msg, color )
 {
@@ -27,113 +27,6 @@ function resetMessage()
 {
     setMessage( startMsg, "black" );
 }
-
-class TileValidator 
-{
-    constructor()
-    {
-        this.dimension = 0;
-        this.rowLength = 0;
-    }
-
-    setDimension( dimension )
-    {
-        this.dimension = Number( dimension );
-        this.rowLength = this.dimension * this.dimension;
-    }
-
-    // Get the next value. Loop around if necessary.
-    getNextValue( i )
-    {
-        i++;
-        if( i > this.rowLength ) {
-            i = 1;
-        }
-        return i;
-    }
-
-    // Get the next row or column item.
-    getNextIndex( i )
-    {
-        i++;
-        if( i >= this.rowLength ) {
-            i = 0;
-        }
-        return i;
-    }
-    
-    isDefined( matrix, i, j )
-    {
-        var defined = false;
-        try {
-            defined = matrix[i];
-        } catch( e ) {
-            return false;
-        }
-        try {
-            defined = matrix[i][j];
-        } catch( e ) {
-            return false;
-        }
-        return defined !== undefined;
-    }
-
-    // TODO: Improvement: this would be a more valuable function 
-    // if it returned more information than just true or false.
-    // More information about why the value is not valid could
-    // be used to give more feedback to the user.
-    isValidValue( matrix, row, column, value )
-    {
-        // If the new value is invalid, return false.
-        if( value < 1 || value > this.rowLength ) {
-            return false; 
-        }
-
-        // Check the new value against others in the row.
-        for( var i = 0; i < this.rowLength; i++ ) {
-            // Skip checking itself.
-            if( i == column ) {
-                continue;
-            }
-            if( this.isDefined( matrix, row, i ) && matrix[row][i] === value ) {
-                return false;
-            }
-        }
-
-        // Check the new value against others in the column.
-        for( var i = 0; i < this.rowLength; i++ ) {
-            // Skip checking itself.
-            if( i == row ) {
-                continue;
-            }
-            if( this.isDefined( matrix, i, column ) && matrix[i][column] === value ) {
-                return false;
-            }
-        }
-
-        // Check against the others in the square.
-        var rowSquare = Math.floor( row / this.dimension );
-        var rowStart = rowSquare * this.dimension;
-        var rowLimit = rowStart + this.dimension;
-
-        var columnSquare = Math.floor( column / this.dimension );
-        var columnStart = columnSquare * this.dimension;
-        var columnLimit = columnStart + this.dimension;
-
-        for( var i = rowStart; i < rowLimit; i++ ) {
-            for( var j = columnStart; j < columnLimit; j++ ) {
-                if( i === row && j === column ) {
-                    continue;
-                }
-                if( this.isDefined( matrix, i, j ) && matrix[i][j] === value ) {
-                    return false;
-                }
-            }
-        }
-        return true;
-    }
-}
-
 function showError( valueLimit )
 {
     if( valueLimit ) {
@@ -144,18 +37,311 @@ function showError( valueLimit )
     }
 }
 
+class GameMaker
+{
+    constructor( dimension )
+    {
+        this.tilesStack = [];
+        this.dimension = dimension;
+        let gameSize = dimension * dimension;
+        this.gameSize = gameSize;
+        this.numTiles = gameSize * gameSize;
+        this.numInitTiles = this.getNumInitTiles( gameSize );
+        this.totalSolvedTiles = 0;
+        // Init this.solvedTiles.
+        this.solvedTiles = new Array( gameSize );
+        for( let i = 0; i < gameSize; i++ ) {
+            this.solvedTiles[i] = [];
+            for( let j = 0; j < gameSize; j++ ) {
+                this.solvedTiles[i].push( 0 );
+            }
+        }
+        this.triedValues = new Array( gameSize );
+        for( let i = 0; i < gameSize; i++ ) {
+            this.triedValues[i] = [];
+            for( let j = 0; j < gameSize; j++ ) {
+                this.triedValues[i].push( [] );
+            }
+        }
+    }
+
+    trySetTile( tile )
+    {
+        let value = this.getRandomValue();
+        let valueCount = this.getTriedLength( tile );
+        let isValid = false;
+        while( valueCount < this.gameSize ) {
+            if( !this.isTried( tile, value ) ) {
+                isValid = this.isValidTile( tile, value );
+                this.addTried( tile, value );
+                if( isValid ) {
+                    return value;
+                }
+            }
+            value = this.getNextValue( value );
+            valueCount++;
+        }
+        return 0;
+    }
+
+    setTile( tile )
+    {
+        if( this.totalSolvedTiles % 10 === 0 ) {
+            log( this.totalSolvedTiles );
+        }
+
+        if( this.totalSolvedTiles === this.numTiles ) {
+            return true;
+        }
+
+        if( tile === undefined ) {
+            tile = this.getRandomTile();
+        
+        } else {
+            // Find an empty tile.
+            if( this.totalSolvedTiles < this.numInitTiles ) {
+                tile = this.getRandomTile();
+                while( !this.isEmptyTile( tile ) ) {
+                    tile = this.getRandomTile();
+                }
+            } else {
+                tile = this.getNextEmptyTile( tile );
+            }
+        }
+        this.tilesStack.push( tile );
+
+        let value = this.trySetTile( tile );
+        while( value !== 0 ) {
+            this.setSolvedTile( tile, value );
+            if( this.setTile( tile ) ) {
+                return true;
+            } else {
+                this.undoNextTile();
+            }
+            value = this.trySetTile( tile );
+        }
+
+        // Unset tile.
+        this.unsetSolvedTile( tile );
+        return false;
+    }
+
+    undoNextTile()
+    {
+        let nextTile = this.tilesStack.pop();
+        let i = nextTile[0];
+        let j = nextTile[1];
+        this.triedValues[i][j].length = 0;
+    }
+
+    addTried( tile, value )
+    {
+        let i = tile[0];
+        let j = tile[1];
+        this.triedValues[i][j].push( value );
+    }
+
+    isTried( tile, value )
+    {
+        let i = tile[0];
+        let j = tile[1];
+        return this.triedValues[i][j].includes( value );
+    }
+
+    getTriedLength( tile )
+    {
+        let i = tile[0];
+        let j = tile[1];
+        return this.triedValues[i][j].length;
+    }
+
+    initGame()
+    {
+        this.setTile();
+    }
+
+    isValidTile( tile, value )  
+    {
+        return this.isValidValue( this.solvedTiles, tile[0], tile[1], value );
+    }
+
+    isValidValue( matrix, row, column, value )
+    {
+        // If the new value is invalid, return false.
+        if( value === NaN || value === undefined || value < 1 || value > this.gameSize ) {
+            return false; 
+        }
+
+        // Check the new value against others in the row.
+        for( var i = 0; i < this.gameSize; i++ ) {
+            // Skip checking itself.
+            if( i == column ) {
+                continue;
+            }
+            if( matrix[row][i] === value ) {
+                return false;
+            }
+        }
+
+        // Check the new value against others in the column.
+        for( var i = 0; i < this.gameSize; i++ ) {
+            // Skip checking itself.
+            if( i == row ) {
+                continue;
+            }
+            if( matrix[i][column] === value ) {
+                return false;
+            }
+        }
+
+        // Check against the others in the square.
+        let dimension = this.dimension;
+        let rowSquare = Math.floor( row / dimension );
+        let rowStart = rowSquare * dimension;
+        let rowLimit = rowStart + dimension;
+
+        let columnSquare = Math.floor( column / dimension );
+        let columnStart = columnSquare * dimension;
+        let columnLimit = columnStart + dimension;
+
+        for( let i = rowStart; i < rowLimit; i++ ) {
+            for( let j = columnStart; j < columnLimit; j++ ) {
+                if( i === row && j === column ) {
+                    continue;
+                }
+                if( matrix[i][j] === value ) {
+                    return false;
+                }
+            }
+        }
+
+        return true;
+    }
+
+    setSolvedTile( tile, value )
+    {
+        this.solvedTiles[tile[0]][tile[1]] = value;
+        this.totalSolvedTiles++;
+    }
+
+    unsetSolvedTile( tile )
+    {
+        this.solvedTiles[tile[0]][tile[1]] = 0;
+        this.totalSolvedTiles--;
+    }
+
+    getRandomValue()
+    {
+        var v;
+        while( v === NaN || v === undefined ) {
+            v = Math.ceil( Math.random() * this.gameSize );
+        } 
+        return v;
+    }
+
+    getNextValue( value )
+    {
+        let next = value + 1;
+        if( next > this.gameSize ) {
+            return 1;
+        }
+        return next;
+    }
+
+    getRandomTileNum()
+    {
+        var v;
+        while( v === NaN || v === undefined ) {
+            v = Math.floor( Math.random() * this.gameSize );
+        } 
+        return v;
+    }
+
+    getRandomTile()
+    {
+        var tile = [];
+        tile[0] = this.getRandomTileNum();
+        tile[1] = this.getRandomTileNum();
+        return tile;
+    }
+
+    getNextTileNum( i )
+    {
+        let next = i + 1;
+        if( next >= this.gameSize ) {
+            return 0;
+        }
+        return next;
+    }
+
+    isEmptyTile( tile )
+    {
+        return this.solvedTiles[tile[0]][tile[1]] === 0;
+    }
+
+    getNextEmptyTile( tile )
+    {
+        let i = tile[0];
+        let j = tile[1];
+        let iCount = 0;
+        while( this.solvedTiles[i][j] !== 0 && iCount < this.gameSize ) {
+            i = this.getNextTileNum( i );
+            iCount++;
+            let jCount = 0;
+            while( this.solvedTiles[i][j] != 0 && jCount < this.gameSize ) {
+                j = this.getNextTileNum( j );
+                jCount++;
+            }
+        }
+        return [ i, j ];
+    }
+
+    getNumInitTiles( gameSize ) 
+    {
+        // Determine how many tiles to initiate.
+        var v;
+        while( v === NaN || v === undefined ) {
+            v = Math.round( ( gameSize * gameSize ) / 3.33 );
+        }
+        return v;
+    }
+
+    getInitTiles()
+    {
+        var initTiles = new Array( this.gameSize );
+        for( let i = 0; i < this.gameSize; i++ ) {
+            initTiles[i] = [];
+            for( let j = 0; j < this.gameSize; j++ ) {
+                initTiles[i].push( 0 );
+            }
+        }
+
+        let tile;
+        for( let i = 0; i < this.numInitTiles; i++ ) {
+            tile = this.tilesStack[i];
+            initTiles[tile[0]][tile[1]] = this.solvedTiles[tile[0]][tile[1]];
+        }
+        return initTiles;
+    }
+}
+
 class TableInitializer
 {
     constructor()
     {
         this.dimension = 0;
         this.rowLength = 0;
+        this.gameMaker = {};
+        this.initTiles = [];
     }
 
     setDimension( dimension )
     {
         this.dimension = Number( dimension );
         this.rowLength = this.dimension * this.dimension;
+        this.gameMaker = new GameMaker( this.dimension );
+        this.gameMaker.initGame();
+        this.initTiles = this.gameMaker.getInitTiles();
     }
 
     toggleReadonly( cellInput )
@@ -165,79 +351,6 @@ class TableInitializer
         } else {
             cellInput.setAttributeNode( document.createAttribute( "readonly" ) );
         }
-    }
-
-    // A sudoku game starts with some of the numbers initialized.
-    // This algorithm is questionable in that the initialized tiles
-    // may not allow the game to have a successful solution. I decided
-    // for now that this is okay, because I have played many, many games
-    // of sudoku and not all of them were solvable.
-    // TODO: Improvement: To initialize tiles for a game that is 
-    // guarranteed to be solvable I would have to basically construct
-    // the solved matrix first, and then show only some of those tiles.
-    // To do this I would have to implement a sudoku solving algorithm, 
-    // which would use a stack to keep track of each randomly added value
-    // to enable backtracking. This is totally doable, and I may do it
-    // later, but I don't have time right now.
-    getInitTiles( validator )
-    {
-        // Set up an array to hold the initialized values.
-        let initTilesArray = new Array( this.rowLength );
-        for( var i = 0; i < this.rowLength; i++ ) {
-            initTilesArray[i] = new Array( this.rowLength );
-        }
-
-        // Determine how many tiles to initiate.
-        var numStartTiles = Math.round( totalTiles / 3.33 );
-
-        // Determine which tiles to initiate and what to initiate them with.
-        for( var i = 0; i < numStartTiles; i++ ) {;
-            // Get a random row value.
-            var row = Math.floor( Math.random() * this.rowLength );
-
-            // Get a random column value. 
-            var column = Math.floor( Math.random() * this.rowLength );
-
-            // Check that this tile isn't already initialized.
-            var isInit = validator.isDefined( initTilesArray, row, column );
-            while( isInit ) {
-
-                // Try incrementing the row.
-                row = validator.getNextIndex( row );
-
-                // Check again.
-                isInit = validator.isDefined( initTilesArray, row, column );
-                if( isInit ) {
-                    // Increment the column and let the while loop do the checking.
-                    column = validator.getNextIndex( column );
-                    isInit = validator.isDefined( initTilesArray, row, column );
-                }
-            }
-
-            // Get the random value.
-            var value = Math.round( Math.random() * this.rowLength );
-            if( value === 0 ) {
-                value++;
-            }
-
-            // Validate and adjust the value if required.
-            var isValidValue = validator.isValidValue( initTilesArray, row, column, value );
-            while( !isValidValue ) {
-                value = validator.getNextValue( value );
-                isValidValue = validator.isValidValue( initTilesArray, row, column, value );
-            }
-
-            // Store the random value.
-            try {
-                initTilesArray[row][column] = value;
-            } catch( e ) {
-                console.log( e );
-                console.log( `row: ${column}  column: ${column}` );
-                console.log( initTilesArray );
-            }
-        }
-
-        return initTilesArray;
     }
 
     // Use this function to set a heavier border for cells that
@@ -294,15 +407,16 @@ class TableInitializer
         return cellsArray;
     }
 
-    setCellsInput( cellsArray, initTiles, tilesArray, validator )
+    setCellsInput( cellsArray, tilesArray )
     {
+        let initTiles = this.gameMaker.getInitTiles();
         for( var i = 0; i < this.rowLength; i++ ) {
             for( var j = 0; j < this.rowLength; j++ ) {
 
                 let cell = cellsArray[i][j];
 
                 // If it is initialized, set it as fixed content.
-                if( validator.isDefined( initTiles, i, j ) ) {
+                if( initTiles[i][j] !== 0 ) {
                     let cellContent = document.createElement( "div" );
                     cellContent.innerHTML = initTiles[i][j];
                     cellContent.setAttribute( "class", "initializedTile" );
@@ -340,7 +454,7 @@ class TableInitializer
                             cellInput.focus();
                         
                         // Run it through the validator.
-                        } else if( !validator.isValidValue( tilesArray, r, c, value ) ) {
+                        } else if( !this.gameMaker.isValidValue( tilesArray, r, c, value ) ) {
                             showError();
                             cellInput.focus();
 
@@ -358,7 +472,7 @@ class TableInitializer
 
                                         // Let the user know that a tile is out of place.
                                         // TODO: Improvement: highlight the offending tile.
-                                        if( !validator.isValidValue( tilesArray, i, j, tilesArray[i][j] ) ) {
+                                        if( !this.gameMaker.isValidValue( tilesArray, i, j, tilesArray[i][j] ) ) {
                                             setMessage( "One or more of your values is incorrect. You lose.", "black" );
                                             return;
                                         }
@@ -381,25 +495,14 @@ class TableInitializer
     // Create a matrix to hold the values in the table cells.
     // Initialize the matrix with the values from the 
     // initialized tiles.
-    getTilesArray( validator, initTilesArray )
+    getTilesArray()
     {
-        let tilesArray = new Array( this.rowLength );
-        for( var i = 0; i < this.rowLength; i++ ) {
-            tilesArray[i] = new Array( this.rowLength );
-            for( var j = 0; j < this.rowLength; j++ ) {
-                if( validator.isDefined( initTilesArray, i, j ) ) {
-                    tilesArray[i][j] = initTilesArray[i][j];
-                    incGlobalTileCount( i, j );
-                } else {
-                    tilesArray[i][j] = 0;
-                }
-            }
-        }
+        let tilesArray = this.gameMaker.getInitTiles();
         return tilesArray;
     }
 };
 
-function initGame( tableInitializer, validator, initTiles )
+function initGame( tableInitializer )
 {
     restart.style.display = "block";
 
@@ -407,10 +510,15 @@ function initGame( tableInitializer, validator, initTiles )
     globalTileCount = 0;
 
     cellsArray = tableInitializer.getAndAddCells( gameTable );
-    tilesArray = tableInitializer.getTilesArray( validator, initTiles );
-    tableInitializer.setCellsInput( cellsArray, initTiles, tilesArray, validator );
+    tilesArray = tableInitializer.getTilesArray();
+    tableInitializer.setCellsInput( cellsArray, tilesArray );
 
     setMessage( "You've got this!" );
+}
+
+function log( s )
+{
+    console.log( s );
 }
 
 //LISTEN FOR load EVENT
@@ -422,24 +530,18 @@ window.onload = function ()
     let gameTable = document.getElementById( "gameTable" );
     gameTable.innerHTML = "";
     let gameForm = document.forms.gameForm;
-    let dimensionSelect = gameForm.dimensionSelect;
+    // let dimensionSelect = gameForm.dimensionSelect;
 
     var dimension;
-    var validator = new TileValidator();
     var tableInitializer = new TableInitializer();
-    var cellsArray;
-    var initTiles;
-    var tilesArray;
     gameForm.onsubmit = function() {
 
-        dimension = Number( dimensionSelect.value );
+        // dimension = Number( dimensionSelect.value );
+        dimension = 2;
         totalTiles = Math.pow( dimension, 4 );
+        tableInitializer.setDimension( dimension, new GameMaker( dimension ) );
 
-        validator.setDimension( dimension );
-        tableInitializer.setDimension( dimension );
-        initTiles = tableInitializer.getInitTiles( validator );
-
-        initGame( tableInitializer, validator, initTiles );
+        initGame( tableInitializer );
 
         return false;
     }
